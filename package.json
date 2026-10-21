@@ -41,10 +41,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Leoguo/ticklist-calendar.git"
+    "url": "git+https://github.com/yzsuki-afk/ticklist-calendar.git"
   },
-  "homepage": "https://github.com/Leoguo/ticklist-calendar#readme",
+  "homepage": "https://github.com/yzsuki-afk/ticklist-calendar#readme",
   "bugs": {
-    "url": "https://github.com/Leoguo/ticklist-calendar/issues"
+    "url": "https://github.com/yzsuki-afk/ticklist-calendar/issues"
   }
 }

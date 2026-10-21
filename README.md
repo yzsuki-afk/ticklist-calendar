@@ -58,7 +58,7 @@
 需要先装好 DeepSeek Harness（DSH）。
 
 ```bash
-git clone https://github.com/Leoguo/ticklist-calendar.git
+git clone https://github.com/yzsuki-afk/ticklist-calendar.git
 ```
 
 然后在 DSH 里对 Agent 说：
