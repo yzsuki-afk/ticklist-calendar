@@ -1,0 +1,8 @@
+# 日历清单 · DSH 插件
+#
+#   Host 半边：注册 /ticklist-calendar 页面与 /ticklist-calendar/api/state 数据口，
+#              数据存 ~/.dsh/storages/ticklist-calendar/tasks.json
+#   Client 半边：左侧栏「日历清单」入口 + 整宽主区（日历 + 右侧 AI 对话）
+- insert:
+    - id: ticklist-calendar
+      name: 'ticklist-calendar'

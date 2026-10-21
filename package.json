@@ -1,0 +1,50 @@
+{
+  "name": "ticklist-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "日历清单：在 DeepSeek Harness 左侧栏放一个日历入口，主区呈现月/周/列表/看板四视图，并带一条独立 AI 对话。",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "app/index.html",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "calendar",
+    "todo",
+    "ticklist",
+    "日历"
+  ],
+  "author": "Leoguo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Leoguo/ticklist-calendar.git"
+  },
+  "homepage": "https://github.com/Leoguo/ticklist-calendar#readme",
+  "bugs": {
+    "url": "https://github.com/Leoguo/ticklist-calendar/issues"
+  }
+}
