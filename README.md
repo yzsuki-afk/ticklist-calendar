@@ -105,6 +105,10 @@ ticklist-calendar/
 - **窗口拖拽的坑**：`-webkit-app-region: drag` 只在顶层文档生效，
   iframe 内部的元素拖不动窗口。所以顶栏由宿主侧 `client.js` 用 React 渲染，
   iframe 只承载内容区。
+- **改包名要同步改客户端模块 id**：`client.js` 顶部的
+  `window.__ModuleLoader__.load({ id })` 里的 `id` 必须与 `package.json` 的 `name`
+  完全一致。只改其一会导致启动时报
+  `duplicate factory registration` / `import failed`，整个 DSH 起不来。
 
 ## 已知限制
 
