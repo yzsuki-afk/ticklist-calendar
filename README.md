@@ -69,6 +69,60 @@ Agent 会调用 `install_bundle` 完成安装，左侧栏随即出现「日历�
 
 > 插件通过绝对路径安装，不需要发布到 npm。
 
+### 安装前自检
+
+仓库带了一个自检脚本，装之前跑一遍能拦住会让 DSH 起不来的错误：
+
+```bash
+node scripts/check.js
+```
+
+它检查两类问题：
+
+- `client.js` 里 `__ModuleLoader__.load({ id })` 的 id 与 `package.json` 的 `name` 是否一致
+- `index.js` / `client.js` 的语法、`cordis.patch.yml` 是否引用了正确的包名
+
+这两项任一不对，装上后 DSH 会直接无法启动。
+
+## ⚠️ 启动失败怎么办
+
+**先说清楚风险**：DSH 的 web boot 要求每个插件 entry 都激活成功，任何插件出错都会让**整个应用起不来**，而弹窗里只有一个「禁用第三方插件」按钮。
+
+那个按钮的代价比文案说的大得多——它会**清空整个 `dsh.profile.bundles`**（实测从 15 个变成 2 个），并把 patch 里的配置项一起丢掉，等于所有第三方插件陪葬。
+
+所以如果 DSH 起不来，**先别点它**，改用仓库自带的急救脚本（在终端里跑，不需要打开 DSH）：
+
+```bash
+# 1) 看当前挂了哪些插件，并打印最新崩溃日志
+python3 scripts/recover.py status
+
+# 2) 从日志里找到出问题的插件名，只停用它
+python3 scripts/recover.py disable ticklist-calendar
+
+# 3) 重启 DSH —— 其他插件全部保留
+
+# 4) 问题修好后恢复
+python3 scripts/recover.py enable ticklist-calendar
+```
+
+日志里的线索长这样：
+
+```
+ticklist-calendar: import failed (see console for the import error)
+client-modules: duplicate factory registration for "@local/ticklist-calendar"
+```
+
+冒号前面那个名字就是 `disable` 的参数。
+
+脚本做的事就是往 profile 的 `cordis.patch.yml` 追加两行：
+
+```yaml
+- id: ticklist-calendar
+  disabled: true
+```
+
+每次改动前都会自动备份成 `cordis.patch.yml.bak-recover-<时间戳>`。
+
 ## 数据存哪
 
 ```
@@ -92,6 +146,8 @@ ticklist-calendar/
 ├── app/index.html        # 全部 UI（单文件 HTML/CSS/JS，无构建步骤）
 ├── locale/{zh,en}.json
 ├── icon.svg
+├── scripts/check.js      # 安装前自检（防 id/包名不一致）
+├── scripts/recover.py    # 启动失败急救：精确停用单个插件
 └── docs/                 # 截图
 ```
 
