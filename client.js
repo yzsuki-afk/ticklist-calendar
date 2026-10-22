@@ -11,7 +11,7 @@
  * 这与本机已有的 ai a-workbench 采用同一种做法。
  */
 window.__ModuleLoader__.load({
-  id: '@local/ticklist-calendar',
+  id: 'ticklist-calendar',
   factory(require) {
     const React = require('react')
     const h = React.createElement
