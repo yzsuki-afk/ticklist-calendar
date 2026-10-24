@@ -299,9 +299,39 @@ window.__ModuleLoader__.load({
       const [dragging, setDragging] = React.useState(false)
       const frameRef = React.useRef(null)
       const bodyRef = React.useRef(null)
+      const chatRef = React.useRef(null)
+      const dragRef = React.useRef(null)
       const widthRef = React.useRef(chatWidth)
       const src = `${ROUTE_PREFIX}/?embed=1&v=${reloadKey}`
       widthRef.current = chatWidth
+
+      // 面板宽度变化（窗口缩放、切换布局）时把对话宽度夹回可用区间：
+      // 上一次在宽窗口里拖出来的宽度，不能把窄窗口里的日历挤成 0。
+      React.useEffect(() => {
+        const node = bodyRef.current
+        if (!node) return undefined
+        const sync = () => {
+          if (dragRef.current) return
+          const next = clampChatWidth(widthRef.current, node.clientWidth)
+          if (next === widthRef.current) return
+          widthRef.current = next
+          setChatWidth(next)
+          writeChatWidth(next)
+        }
+        sync()
+        if (typeof ResizeObserver !== 'function') return undefined
+        const observer = new ResizeObserver(sync)
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [])
+
+      // 组件卸载时如果还在拖动，收掉遮罩和全局监听。
+      React.useEffect(
+        () => () => {
+          if (dragRef.current) dragRef.current.cancel()
+        },
+        [],
+      )
 
       const post = React.useCallback((message) => {
         const win = frameRef.current && frameRef.current.contentWindow
@@ -316,30 +346,74 @@ window.__ModuleLoader__.load({
       React.useEffect(() => { post({ type: 'ticklist:setView', view }) }, [view, post])
       React.useEffect(() => { post({ type: 'ticklist:setQuery', query }) }, [query, post])
 
-      /* 拖动分隔条：日历一边、AI 一边，宽度持久化 */
+      /* 拖动分隔条：日历一边、AI 一边，宽度持久化
+       *
+       * 拖的时候铺一层全屏透明遮罩，让指针始终落在主文档里。日历是 iframe：
+       * 不遮住的话，指针一快就会一步跨进 iframe，iframe 会吃掉 pointermove /
+       * pointerup —— 宽度卡住不动，松手后还继续跟着鼠标变。
+       * 拖动期间直接改 DOM 宽度、松手才提交 state，避免每帧重渲染整个对话区。
+       */
       const onSplitDown = React.useCallback((event) => {
-        if (event.button !== 0) return
+        if (event.button !== 0 || dragRef.current) return
         event.preventDefault()
         const startX = event.clientX
         const startWidth = widthRef.current
-        const bodyWidth = bodyRef.current ? bodyRef.current.clientWidth : 0
-        const maxWidth = bodyWidth > 0 ? Math.max(280, bodyWidth - 420) : 900
+        const pointerId = event.pointerId
+        const shield = document.createElement('div')
+        shield.setAttribute('data-ticklist-drag-shield', '')
+        shield.style.cssText =
+          'position:fixed;inset:0;z-index:2147483000;cursor:col-resize;background:transparent'
+        document.body.appendChild(shield)
+        const previousUserSelect = document.body.style.userSelect
+        document.body.style.userSelect = 'none'
         setDragging(true)
 
-        const move = (moveEvent) => {
-          const next = Math.max(280, Math.min(maxWidth, startWidth + (startX - moveEvent.clientX)))
-          setChatWidth(Math.round(next))
+        function apply(value) {
+          const next = clampChatWidth(value, bodyRef.current ? bodyRef.current.clientWidth : 0)
+          widthRef.current = next
+          if (chatRef.current) chatRef.current.style.width = next + 'px'
         }
-        const up = () => {
+
+        function move(moveEvent) {
+          if (moveEvent.pointerId !== pointerId) return
+          apply(startWidth + (startX - moveEvent.clientX))
+        }
+
+        function stop(commit) {
           window.removeEventListener('pointermove', move)
-          window.removeEventListener('pointerup', up)
-          window.removeEventListener('pointercancel', up)
+          window.removeEventListener('pointerup', stop)
+          window.removeEventListener('pointercancel', stop)
+          window.removeEventListener('blur', onBlur)
+          if (shield.parentNode) shield.parentNode.removeChild(shield)
+          document.body.style.userSelect = previousUserSelect
+          dragRef.current = null
+          const next = widthRef.current
+          if (commit) {
+            setChatWidth(next)
+            writeChatWidth(next)
+          }
           setDragging(false)
-          writeChatWidth(widthRef.current)
         }
+
+        function onBlur() {
+          stop(true)
+        }
+
+        dragRef.current = { cancel: () => stop(true) }
+
         window.addEventListener('pointermove', move)
-        window.addEventListener('pointerup', up)
-        window.addEventListener('pointercancel', up)
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('pointercancel', stop)
+        window.addEventListener('blur', onBlur)
+      }, [])
+
+      /* 双击分隔条复位到默认宽度（同样受当前面板宽度约束）。 */
+      const resetWidth = React.useCallback(() => {
+        const next = clampChatWidth(CHAT_WIDTH_DEFAULT, bodyRef.current ? bodyRef.current.clientWidth : 0)
+        widthRef.current = next
+        if (chatRef.current) chatRef.current.style.width = next + 'px'
+        setChatWidth(next)
+        writeChatWidth(next)
       }, [])
 
       const dragStyle = IS_MAC ? { WebkitAppRegion: 'drag' } : undefined
@@ -536,10 +610,7 @@ window.__ModuleLoader__.load({
             'aria-orientation': 'vertical',
             title: '拖动调整宽度',
             onPointerDown: onSplitDown,
-            onDoubleClick: () => {
-              setChatWidth(380)
-              writeChatWidth(380)
-            },
+            onDoubleClick: resetWidth,
             style: {
               flex: 'none',
               width: 6,
@@ -555,6 +626,7 @@ window.__ModuleLoader__.load({
             'div',
             {
               key: 'chat',
+              ref: chatRef,
               style: {
                 flex: 'none',
                 width: chatWidth + 'px',
@@ -586,9 +658,26 @@ window.__ModuleLoader__.load({
       return 'week'
     }
 
+    const CHAT_WIDTH_DEFAULT = 380
+    const CHAT_WIDTH_MIN = 280
+    const CHAT_WIDTH_MAX = 900
+    /** 日历一侧至少保留的宽度。 */
+    const CHAT_MIN_STAGE = 420
+
+    /**
+     * 把对话宽度夹进当前面板可用的区间。
+     * 面板变窄时（窗口缩小）也要靠它把上一次拖得很宽的值收回来。
+     */
+    function clampChatWidth(value, bodyWidth) {
+      const total = bodyWidth > 0 ? bodyWidth : 0
+      const max = total > 0 ? Math.max(CHAT_WIDTH_MIN, Math.min(CHAT_WIDTH_MAX, total - CHAT_MIN_STAGE)) : CHAT_WIDTH_MAX
+      return Math.max(CHAT_WIDTH_MIN, Math.min(max, Math.round(value)))
+    }
+
     function readChatWidth() {
       const raw = Number(readLocal('ticklist-calendar.chatWidth'))
-      return Number.isFinite(raw) && raw >= 240 ? raw : 380
+      if (!Number.isFinite(raw) || raw < CHAT_WIDTH_MIN || raw > CHAT_WIDTH_MAX) return CHAT_WIDTH_DEFAULT
+      return Math.round(raw)
     }
     function writeChatWidth(value) {
       writeLocal('ticklist-calendar.chatWidth', String(value))

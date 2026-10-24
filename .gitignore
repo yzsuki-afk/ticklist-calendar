@@ -11,6 +11,10 @@ yarn.lock
 *.log
 *.tmp
 *.corrupt-*
+# 本地修改前的临时备份（如 client.js.bak-20261022-splitfix）
+*.bak
+*.bak-*
+*.bak.*
 
 # 编辑器
 .vscode/

@@ -1,6 +1,6 @@
 {
   "name": "ticklist-calendar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "日历清单：在 DeepSeek Harness 左侧栏放一个日历入口，主区呈现月/周/列表/看板四视图，并带一条独立 AI 对话。",

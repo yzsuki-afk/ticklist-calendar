@@ -828,7 +828,12 @@ if (location.search.includes('debug')) {
 
   var seq = 1000;
   function makeTask(o) {
-    return Object.assign({ id: 't' + (++seq), start: null, priority: 'normal', done: false }, o);
+    var t = Object.assign({ id: 't' + (++seq), start: null, priority: 'normal', done: false }, o);
+    /* 列表/看板按 group 分段渲染，没有 group 的任务在这两处会整条消失
+     * （数量照算、内容空白）。新建路径统一走这里，一律补上分组。 */
+    if (!groupById(t.group)) t.group = firstOpenGroup().id;
+    t.done = !!groupById(t.group).done;
+    return t;
   }
   var key = function (n) { return fmtDate(addDays(today, n)); };
 
@@ -1956,6 +1961,9 @@ if (location.search.includes('debug')) {
 
   /* ---------------- 渲染入口 ---------------- */
   function render() {
+    /* 兜底：历史数据或异常路径可能留下没分组、或分组已被删掉的任务，
+     * 渲染前统一归位，避免「数量有、列表看板却是空的」。 */
+    normalizeTaskGroups();
     var keep = taskScroll.scrollTop;
     var cal = state.view === 'month' || state.view === 'week';
     var calHead = document.querySelector('.cal-head');
