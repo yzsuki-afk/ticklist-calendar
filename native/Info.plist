@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.ticklist.calendar-bridge</string>
+  <key>CFBundleName</key><string>Ticklist Calendar Bridge</string>
+  <key>CFBundleDisplayName</key><string>日历清单 · Apple 日历连接</string>
+  <key>CFBundleExecutable</key><string>calendar-bridge</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSCalendarsUsageDescription</key><string>仅在您点击授权后，读取 Apple 日历并同步您选定 iCloud/CalDAV 账户中的“日历清单”专用日历。不会修改其他日历。</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>日历清单需要完整日历访问权限，以读取同步事件、识别任务关联并更新您明确选定的 iCloud/CalDAV “日历清单”专用日历。仅在您主动授权后请求；不会修改其他日历。</string>
+  <key>NSCalendarsWriteOnlyAccessUsageDescription</key><string>日历清单同步需要读取及写入您选定的专用日历；仅写入权限不足以同步。本应用仅在您主动授权时请求完整日历访问权限。</string>
+</dict></plist>

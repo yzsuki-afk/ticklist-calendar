@@ -124,9 +124,12 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 创建会话时不指定工作区，交给 DSH 用默认值。 */
-    function createOptions() {
-      return {}
+    /** Explicit per-machine client directory; never reuse a deleted project cwd. */
+    async function connectionConfig() {
+      const response = await fetch(`${ROUTE_PREFIX}/config`, { cache: 'no-store' })
+      const config = await response.json()
+      if (!response.ok || !config.sessionDir) throw new Error('无法读取日历客户端配置，请刷新或重启 DSH')
+      return config
     }
 
     async function retainById(id) {
@@ -149,23 +152,24 @@ window.__ModuleLoader__.load({
     async function createSession(forceNew) {
       const sessions = pluginCtx && pluginCtx.get && pluginCtx.get('sessions')
       if (!sessions) throw new Error('sessions service unavailable')
-
+      const config = await connectionConfig()
+      const sessionKey = `${SESSION_KEY}.v2:${config.mode}:${encodeURIComponent(config.sessionDir)}`
       if (!forceNew) {
-        const saved = readLocal(SESSION_KEY)
+        const saved = readLocal(sessionKey)
         if (saved) {
           try {
             return await retainById(saved)
           } catch (error) {
-            clearLocal(SESSION_KEY)
+            clearLocal(sessionKey)
           }
         }
       } else {
-        clearLocal(SESSION_KEY)
+        clearLocal(sessionKey)
       }
 
-      const id = await sessions.create(createOptions())
+      const id = await sessions.create({ cwd: config.sessionDir })
       if (typeof id !== 'string' || id === '') throw new Error('session.create returned no id')
-      writeLocal(SESSION_KEY, id)
+      writeLocal(sessionKey, id)
       return await retainById(id)
     }
 
@@ -278,7 +282,7 @@ window.__ModuleLoader__.load({
         { session: reference },
         h(
           'div',
-          { style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 } },
+          { style: { display: 'flex', flexDirection: 'column', flex: 1, height: '100%', minHeight: 0 } },
           renderSlot(CHAT_SLOT, {}, { fallback: null })
         )
       )
@@ -294,6 +298,9 @@ window.__ModuleLoader__.load({
     function MainPanel(props) {
       const [view, setView] = React.useState(readView)
       const [query, setQuery] = React.useState('')
+      const [chatOpen, setChatOpen] = React.useState(() => readLocal('ticklist-calendar.chatOpen') !== '0')
+      const [dataStatus, setDataStatus] = React.useState('正在连接 Mini…')
+      const [dataBusy, setDataBusy] = React.useState(false)
       const [reloadKey, setReloadKey] = React.useState(0)
       const [chatWidth, setChatWidth] = React.useState(readChatWidth)
       const [dragging, setDragging] = React.useState(false)
@@ -302,7 +309,7 @@ window.__ModuleLoader__.load({
       const chatRef = React.useRef(null)
       const dragRef = React.useRef(null)
       const widthRef = React.useRef(chatWidth)
-      const src = `${ROUTE_PREFIX}/?embed=1&v=${reloadKey}`
+      const src = `${ROUTE_PREFIX}/?embed=1&hostToolbar=1&v=${reloadKey}`
       widthRef.current = chatWidth
 
       // 面板宽度变化（窗口缩放、切换布局）时把对话宽度夹回可用区间：
@@ -337,12 +344,22 @@ window.__ModuleLoader__.load({
         const win = frameRef.current && frameRef.current.contentWindow
         if (!win) return
         try {
-          win.postMessage(message, '*')
+          win.postMessage(message, window.location.origin)
         } catch (error) {
           /* 未就绪时忽略 */
         }
       }, [])
 
+      React.useEffect(() => {
+        const receive = event => {
+          if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow) return
+          if (event.data?.type !== 'ticklist:data-status' || typeof event.data.text !== 'string') return
+          setDataStatus(event.data.text)
+          setDataBusy(event.data.busy === true)
+        }
+        window.addEventListener('message', receive)
+        return () => window.removeEventListener('message', receive)
+      }, [])
       React.useEffect(() => { post({ type: 'ticklist:setView', view }) }, [view, post])
       React.useEffect(() => { post({ type: 'ticklist:setQuery', query }) }, [query, post])
 
@@ -419,6 +436,9 @@ window.__ModuleLoader__.load({
       const dragStyle = IS_MAC ? { WebkitAppRegion: 'drag' } : undefined
       const noDragStyle = IS_MAC ? { WebkitAppRegion: 'no-drag' } : undefined
 
+      const action = (label, onClick, extra = {}) => h('button', {
+        type: 'button', className: 'tk-action', onClick, style: noDragStyle, ...extra
+      }, label)
       const segBtn = (target, label) => {
         const on = view === target
         return h(
@@ -464,6 +484,14 @@ window.__ModuleLoader__.load({
             minHeight: 0
           }
         },
+        h('style', null, `
+          .tk-action{height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,#56626F);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer;-webkit-app-region:no-drag}
+          .tk-action:hover{background:var(--dsw-alias-bg-layer-2,#EDF0F4);color:var(--dsw-alias-label-primary,#1F2933)}
+          .tk-action:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#315F9D);outline-offset:2px}
+          .tk-action:disabled{opacity:.55;cursor:wait}
+          .tk-chat-stage{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+          .tk-chat-stage [data-composer-seat]{margin-top:auto}
+        `),
         /* ---------- 顶栏 ---------- */
         h(
           'div',
@@ -473,9 +501,9 @@ window.__ModuleLoader__.load({
               height: BAR_HEIGHT,
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
-              padding: '0 16px',
-              background: 'var(--dsw-specific-sidebar-fill, #F4F6F9)',
+              gap: 8,
+              padding: '0 12px',
+              background: 'var(--dsw-alias-bg-layer-1, #FFFFFF)',
               color: 'var(--dsw-alias-label-primary, #1F2933)',
               borderBottom: '1px solid var(--dsw-alias-border-l1, #E3E8EF)',
               ...dragStyle
@@ -521,8 +549,10 @@ window.__ModuleLoader__.load({
                 alignItems: 'center',
                 gap: 6,
                 height: 30,
-                width: 220,
-                marginLeft: 16,
+                width: 200,
+                minWidth: 100,
+                flex: '0 1 200px',
+                marginLeft: 8,
                 padding: '0 9px',
                 borderRadius: 8,
                 background: 'var(--dsw-alias-bg-layer-1, #FFFFFF)',
@@ -578,7 +608,16 @@ window.__ModuleLoader__.load({
             segBtn('list', '列表'),
             segBtn('board', '看板')
           ),
-          h('span', { style: { flex: '1 1 auto' } })
+          h('span', { style: { flex: '1 1 auto', minWidth: 4 } }),
+          h('span', { role: 'status', 'aria-live': 'polite', title: dataStatus,
+            style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary,#56626F)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+          }, dataStatus),
+          action(dataBusy ? '刷新中…' : '刷新', () => post({ type: 'ticklist:refresh' }), { disabled: dataBusy }),
+          action(chatOpen ? '收起 AI' : '展开 AI', () => setChatOpen(value => {
+            writeLocal('ticklist-calendar.chatOpen', value ? '0' : '1')
+            return !value
+          }), { 'aria-expanded': chatOpen, 'aria-controls': 'ticklist-ai-pane' }),
+          action('新窗口', () => window.open(ROUTE_PREFIX + '/', '_blank', 'noopener,noreferrer'))
         ),
         /* ---------- 内容：日历 + AI ---------- */
         h(
@@ -592,7 +631,11 @@ window.__ModuleLoader__.load({
             ref: frameRef,
             src,
             title: 'TickList 日历',
-            onLoad: () => post({ type: 'ticklist:setView', view }),
+            onLoad: () => {
+              post({ type: 'ticklist:setView', view })
+              post({ type: 'ticklist:setQuery', query })
+              post({ type: 'ticklist:status-request' })
+            },
             style: {
               flex: '1 1 auto',
               width: '100%',
@@ -614,6 +657,7 @@ window.__ModuleLoader__.load({
             style: {
               flex: 'none',
               width: 6,
+              display: chatOpen ? 'block' : 'none',
               cursor: 'col-resize',
               background: dragging
                 ? 'var(--dsw-alias-brand-primary, #315F9D)'
@@ -626,22 +670,29 @@ window.__ModuleLoader__.load({
             'div',
             {
               key: 'chat',
+              id: 'ticklist-ai-pane',
               ref: chatRef,
               style: {
                 flex: 'none',
                 width: chatWidth + 'px',
                 minWidth: 0,
                 height: '100%',
-                display: 'flex',
+                minHeight: 0,
+                display: chatOpen ? 'flex' : 'none',
                 flexDirection: 'column',
                 background: 'var(--dsw-alias-bg-layer-1, #FFFFFF)',
                 borderLeft: '1px solid var(--dsw-alias-border-l1, #E3E8EF)'
               }
             },
-            h(ChatSurface, {
+            h('div', { 'data-window-drag': '', style: { display: 'flex', alignItems: 'center', gap: 7, flex: 'none', height: 36, padding: '0 12px', borderBottom: '1px solid var(--dsw-alias-border-l1,#E3E8EF)', fontSize: 12, color: 'var(--dsw-alias-label-secondary,#56626F)', ...dragStyle } },
+              h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: 'var(--dsw-alias-state-success-primary,#2E7D6B)' } }),
+              h('span', null, '日历 AI · 独立会话'),
+              h('span', { style: { marginLeft: 'auto', fontSize: 11 } }, '独立上下文')
+            ),
+            h('div', { className: 'tk-chat-stage' }, h(ChatSurface, {
               SessionProvider: props && props.SessionProvider,
               renderSlot: props && props.renderSlot
-            })
+            }))
           )
         )
       )
